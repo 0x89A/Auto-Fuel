@@ -5,52 +5,63 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Auto Fuel", "0x89A", "2.0.0")]
+    [Info("Auto Fuel", "0x89A", "2.1.0")]
     [Description("Automatically fuels lights using fuel from the tool cupboard's inventory")]
     class AutoFuel : RustPlugin
     {
         private Configuration _config;
 
-        private const string usePerm = "autofuel.use";
+        private const string _usePerm = "autofuel.use";
 
-        private Dictionary<uint, BuildingPrivlidge> _cachedToolCupboards = new Dictionary<uint, BuildingPrivlidge>();
+        private readonly Dictionary<uint, BuildingPrivlidge> _cachedToolCupboards = new Dictionary<uint, BuildingPrivlidge>();
+
+        private const int _woodItemId = -151838493;
+        private const int _lowGradeItemId = -946369541;
 
         private void Init()
         {
-            permission.RegisterPermission(usePerm, this);
+            permission.RegisterPermission(_usePerm, this);
         }
+
+        #region -Oxide Hooks-
 
         private void OnItemUse(Item item, int amountToUse)
         {
+            if (item.amount - amountToUse > 0)
+            {
+                return;
+            }
+            
             BaseEntity parentEntity = item.GetRootContainer()?.entityOwner;
 
-            if (parentEntity != null && _config.AllowedEntities.Contains(parentEntity.ShortPrefabName))
+            if (parentEntity == null || !_config.AllowedEntities.Contains(parentEntity.ShortPrefabName))
             {
-                BuildingPrivlidge toolCupboard = null;
-                if (!GetToolCupboard(parentEntity, ref toolCupboard))
-                {
-                    return; //Ignore if ent has no TC
-                }
-
-                if (parentEntity is FuelGenerator) //Small fuel generator
-                {
-                    FuelGenerator generator = parentEntity as FuelGenerator;
-
-                    if (item.amount - amountToUse <= 0) //If going to run out of fuel
-                    {
-                        TryRefill(item.info.itemid, generator, generator.inventory, toolCupboard, amountToUse);
-                    }
-                }
-                else if (parentEntity is FogMachine) //Snow and fog machines
-                {
-                    FogMachine machine = parentEntity as FogMachine;
-
-                    if (item.amount - amountToUse <= 0)
-                    {
-                        TryRefill(item.info.itemid, machine, machine.inventory, toolCupboard, amountToUse);
-                    }
-                }
+                return;
             }
+
+            BuildingPrivlidge toolCupboard = null;
+            if (!GetToolCupboard(parentEntity, ref toolCupboard))
+            {
+                return; //Ignore if ent has no TC
+            }
+
+            ItemContainer inventory = null;
+            
+            if (parentEntity is FuelGenerator) //Small fuel generator
+            {
+                inventory = (parentEntity as FuelGenerator).inventory;
+            }
+            else if (parentEntity is FogMachine) //Snow and fog machines
+            {
+                inventory = (parentEntity as FogMachine).inventory;
+            }
+
+            if (inventory == null)
+            {
+                return;
+            }
+            
+            TryRefill(item.info.itemid, parentEntity, inventory, toolCupboard, amountToUse);
         }
 
         private void OnFuelConsume(BaseOven oven, Item fuel, ItemModBurnable burnable)
@@ -65,14 +76,16 @@ namespace Oxide.Plugins
         //If activated and has no fuel, fetch from TC
         private void OnOvenToggle(BaseOven oven, BasePlayer player)
         {
-            OnToggle(oven, oven.inventory, oven.fuelType?.itemid ?? -151838493);
+            OnToggle(oven, oven.inventory, oven.fuelType?.itemid ?? _woodItemId);
         }
 
         //If activated and has no fuel, fetch from TC
         private void OnSwitchToggle(FuelGenerator generator, BasePlayer player)
         {
-            OnToggle(generator, generator.inventory, -946369541);
+            OnToggle(generator, generator.inventory, _lowGradeItemId);
         }
+
+        #endregion
 
         private void TryRefill(int itemToFind, BaseEntity ent, ItemContainer container, BuildingPrivlidge toolCupboard, int amount = 1)
         {
@@ -84,28 +97,29 @@ namespace Oxide.Plugins
             List<Item> items = toolCupboard.inventory.FindItemsByItemID(itemToFind);
 
             int numRequired = amount;
-            for (int i = 0; i < items.Count; i++)
+            foreach (Item item in items)
             {
-                if (numRequired <= 0) break;
-
-                Item item = items[i];
-
-                if (item != null)
+                if (numRequired <= 0)
                 {
-                    if (item.amount > numRequired)
-                    {
-                        item.amount -= numRequired;
-                        item.MarkDirty();
-
-                        container.AddItem(item.info, numRequired, item.skin);
-                        break;
-                    }
-                    else
-                    {
-                        numRequired -= item.amount;
-                        item.MoveToContainer(container);
-                    }
+                    break;
                 }
+
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (item.amount > numRequired)
+                {
+                    item.amount -= numRequired;
+                    item.MarkDirty();
+
+                    container.AddItem(item.info, numRequired, item.skin);
+                    break;
+                }
+
+                numRequired -= item.amount;
+                item.MoveToContainer(container);
             }
         }
 
@@ -123,6 +137,8 @@ namespace Oxide.Plugins
             }
         }
 
+        #region -Helpers-
+
         private bool GetToolCupboard(BaseEntity entity, ref BuildingPrivlidge toolCupboard)
         {
             if (entity.net == null)
@@ -132,19 +148,14 @@ namespace Oxide.Plugins
 
             uint netId = entity.net.ID;
 
-            if (!_cachedToolCupboards.TryGetValue(netId, out toolCupboard) || toolCupboard == null) //If nothing cached or cached tc is now null
+            if (_cachedToolCupboards.TryGetValue(netId, out toolCupboard) && toolCupboard != null)
             {
-                toolCupboard = entity.GetBuildingPrivilege();
-
-                if (!_cachedToolCupboards.ContainsKey(netId))
-                {
-                    _cachedToolCupboards.Add(netId, toolCupboard);
-                }
-                else
-                {
-                    _cachedToolCupboards[netId] = toolCupboard;
-                }
+                return true;
             }
+
+            toolCupboard = entity.GetBuildingPrivilege();
+            
+            _cachedToolCupboards[netId] = toolCupboard;
 
             return toolCupboard != null;
         }
@@ -156,7 +167,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            if (_config.CheckEntityForPerm && permission.UserHasPermission(ent.OwnerID.ToString(), usePerm))
+            if (_config.CheckEntityForPerm && permission.UserHasPermission(ent.OwnerID.ToString(), _usePerm))
             {
                 return true;
             }
@@ -165,7 +176,7 @@ namespace Oxide.Plugins
             {
                 foreach (var player in privlidge.authorizedPlayers)
                 {
-                    if (permission.UserHasPermission(player.userid.ToString(), usePerm))
+                    if (permission.UserHasPermission(player.userid.ToString(), _usePerm))
                     {
                         return true;
                     }
@@ -174,6 +185,8 @@ namespace Oxide.Plugins
 
             return false;
         }
+
+        #endregion
 
         #region -Configuration-
 
@@ -236,7 +249,8 @@ namespace Oxide.Plugins
                     "fogmachine",
                     "snowmachine",
                     "chineselantern.deployed",
-                    "hobobarrel.deployed"
+                    "hobobarrel.deployed",
+                    "small_fuel_generator.deployed"
                 }
             };
         }
