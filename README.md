@@ -23,7 +23,8 @@ Simply put fuel in a tool cupboard's inventory where that item is within its rad
     "fogmachine",
     "snowmachine",
     "chineselantern.deployed",
-    "hobobarrel.deployed"
+    "hobobarrel.deployed", 
+    "small_fuel_generator.deployed" 
   ],
   "Check entity owner for permission": false,
   "Anyone on tool cupboard has permission": true
