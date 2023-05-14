@@ -2,6 +2,10 @@
 
 Simply put fuel in a tool cupboard's inventory where that item is within its radius and any powered fuel sources *(lights, furnaces, etc.)* will automatically take their required fuel item/resource *(if it exists)* from the tool cupboard's inventory when needed. Keep in mind what type of fuel each fuel source requires and make sure to keep the tool cupboard stocked!
 
+## Permisions
+
+- `autofuel.use` => Allows player to be affected by this plugin.
+
 ## Configuration
 
 ```json

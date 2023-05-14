@@ -3,9 +3,14 @@ using System.Collections.Generic;
 
 using Newtonsoft.Json;
 
+/*
+ * == 2.1.1 ==
+ * - Compile fix for 4th May 2023 Rust update.
+ */
+
 namespace Oxide.Plugins
 {
-    [Info("Auto Fuel", "0x89A", "2.1.0")]
+    [Info("Auto Fuel", "0x89A", "2.1.1")]
     [Description("Automatically fuels lights using fuel from the tool cupboard's inventory")]
     class AutoFuel : RustPlugin
     {
@@ -13,7 +18,7 @@ namespace Oxide.Plugins
 
         private const string _usePerm = "autofuel.use";
 
-        private readonly Dictionary<uint, BuildingPrivlidge> _cachedToolCupboards = new Dictionary<uint, BuildingPrivlidge>();
+        private readonly Dictionary<ulong, BuildingPrivlidge> _cachedToolCupboards = new Dictionary<ulong, BuildingPrivlidge>();
 
         private const int _woodItemId = -151838493;
         private const int _lowGradeItemId = -946369541;
@@ -146,7 +151,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            uint netId = entity.net.ID;
+            ulong netId = entity.net.ID.Value;
 
             if (_cachedToolCupboards.TryGetValue(netId, out toolCupboard) && toolCupboard != null)
             {
